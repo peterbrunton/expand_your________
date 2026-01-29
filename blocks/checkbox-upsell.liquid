@@ -23,19 +23,7 @@
         assign variant = product.selected_or_first_available_variant
         assign variant_list = product.variants
 
-        if block_settings.upsell_variant_id != blank
-          assign raw_variant_id = block_settings.upsell_variant_id | strip
-          if raw_variant_id contains '/'
-            assign raw_variant_id = raw_variant_id | split: '/' | last
-          endif
-          assign variant_id_number = raw_variant_id | plus: 0
-          assign variant_from_setting = product.variants | where: 'id', variant_id_number | first
-          if variant_from_setting != blank
-            assign variant = variant_from_setting
-          endif
-        endif
-
-        assign default_quantity = block_settings.default_quantity | default: 1
+        assign default_quantity = 1
         if block_settings.default_quantity_dynamic != blank
           assign default_quantity = block_settings.default_quantity_dynamic | plus: 0
         endif
@@ -65,7 +53,6 @@
             value="{{ variant.id }}"
             data-upsell-checkbox
             data-upsell-variant-id="{{ variant.id }}"
-            data-upsell-default-quantity="{{ default_quantity }}"
             aria-labelledby="{{ title_id }}"
             aria-describedby="{{ price_id }}"
             form="{{ product_form_id }}"
@@ -92,8 +79,8 @@
             </span>
           </label>
 
-          <div class="checkbox-upsell__controls">
-            {% if block_settings.show_variant_selector and variant_list.size > 1 %}
+          {% if block_settings.show_variant_selector and variant_list.size > 1 %}
+            <div class="checkbox-upsell__controls">
               <div class="checkbox-upsell__variant">
                 <label class="checkbox-upsell__variant-label" for="{{ select_id }}">Variant</label>
                 <select
@@ -116,26 +103,8 @@
                   {% endfor %}
                 </select>
               </div>
-            {% endif %}
-
-            {% if block_settings.show_quantity %}
-              <div class="checkbox-upsell__quantity">
-                <input
-                  type="number"
-                  class="checkbox-upsell__quantity-input"
-                  min="1"
-                  step="1"
-                  value="{{ default_quantity }}"
-                  data-upsell-quantity
-                  data-upsell-id="{{ variant.id }}"
-                  form="{{ product_form_id }}"
-                  {% unless is_available %}
-                    disabled
-                  {% endunless %}
-                >
-              </div>
-            {% endif %}
-          </div>
+            </div>
+          {% endif %}
         </div>
 
         <input
@@ -185,34 +154,24 @@
 
         const syncQuantity = (checkbox) => {
           const variantId = checkbox.dataset.upsellVariantId;
-          const quantityInput = this.querySelector(`[data-upsell-quantity][data-upsell-id="${variantId}"]`);
           const hiddenId = this.querySelector(`[data-upsell-hidden-id][data-upsell-hidden-variant="${variantId}"]`);
           const hiddenQuantity = this.querySelector(
             `[data-upsell-hidden-quantity][data-upsell-hidden-variant="${variantId}"]`
           );
 
           if (checkbox.checked) {
-            if (quantityInput) {
-              quantityInput.removeAttribute('disabled');
-              const min = Number(quantityInput.min) || 1;
-              const currentValue = Number(quantityInput.value);
-              if (!currentValue || currentValue < min) quantityInput.value = String(min);
-            }
             hiddenId?.removeAttribute('disabled');
             hiddenQuantity?.removeAttribute('disabled');
             if (hiddenQuantity instanceof HTMLInputElement) {
-              const nextValue = quantityInput instanceof HTMLInputElement ? quantityInput.value : checkbox.dataset.upsellDefaultQuantity;
-              hiddenQuantity.value = nextValue || '1';
+              hiddenQuantity.value = hiddenQuantity.value || '1';
             }
           } else {
-            quantityInput?.setAttribute('disabled', 'true');
             hiddenId?.setAttribute('disabled', 'true');
             hiddenQuantity?.setAttribute('disabled', 'true');
           }
         };
 
         const updateVariant = (checkbox, variantId) => {
-          const quantityInput = this.querySelector('[data-upsell-quantity]');
           const hiddenId = this.querySelector('[data-upsell-hidden-id]');
           const hiddenQuantity = this.querySelector('[data-upsell-hidden-quantity]');
 
@@ -226,10 +185,6 @@
 
           if (hiddenQuantity instanceof HTMLInputElement) {
             hiddenQuantity.dataset.upsellHiddenVariant = variantId;
-          }
-
-          if (quantityInput instanceof HTMLInputElement) {
-            quantityInput.dataset.upsellId = variantId;
           }
 
           syncQuantity(checkbox);
@@ -253,20 +208,6 @@
           });
         });
 
-        this.addEventListener('input', (event) => {
-          const target = event.target;
-          if (!(target instanceof HTMLInputElement)) return;
-          if (!target.matches('[data-upsell-quantity]')) return;
-          const variantId = target.dataset.upsellId;
-          const hiddenQuantity = this.querySelector(
-            `[data-upsell-hidden-quantity][data-upsell-hidden-variant="${variantId}"]`
-          );
-          if (hiddenQuantity instanceof HTMLInputElement) {
-            const min = Number(target.min) || 1;
-            const nextValue = Number(target.value) || min;
-            hiddenQuantity.value = String(Math.max(min, nextValue));
-          }
-        });
       }
     }
 
@@ -339,7 +280,7 @@
 
   .checkbox-upsell__controls {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr;
     gap: 0.6rem;
     align-items: end;
   }
@@ -361,24 +302,6 @@
     border-radius: 0.4rem;
     border: 1px solid rgb(var(--color-foreground-rgb) / 12%);
     background: var(--input-background-color, rgb(var(--color-background-rgb)));
-  }
-
-  .checkbox-upsell__quantity {
-    min-width: 3.25rem;
-  }
-
-  .checkbox-upsell__quantity-input {
-    width: 3.25rem;
-    text-align: center;
-    padding: 0.35rem 0.4rem;
-    border-radius: 0.4rem;
-    border: 1px solid rgb(var(--color-foreground-rgb) / 12%);
-    background: var(--input-background-color, rgb(var(--color-background-rgb)));
-  }
-
-  .checkbox-upsell__quantity-input:disabled {
-    background: var(--input-disabled-background-color);
-    color: var(--input-disabled-text-color);
   }
 
   .checkbox-upsell__image {
@@ -438,12 +361,6 @@
       "label": "Upsell product"
     },
     {
-      "type": "text",
-      "id": "upsell_variant_id",
-      "label": "Upsell variant ID (optional)",
-      "info": "Use a variant ID or connect a dynamic source that outputs a variant ID."
-    },
-    {
       "type": "checkbox",
       "id": "show_price",
       "label": "Show price",
@@ -462,25 +379,10 @@
       "default": true
     },
     {
-      "type": "checkbox",
-      "id": "show_quantity",
-      "label": "Show quantity",
-      "default": true
-    },
-    {
-      "type": "range",
-      "id": "default_quantity",
-      "label": "Default quantity",
-      "min": 1,
-      "max": 10,
-      "step": 1,
-      "default": 1
-    },
-    {
       "type": "text",
       "id": "default_quantity_dynamic",
       "label": "Default quantity (dynamic)",
-      "info": "Optional. Connect a dynamic source that outputs a number. Overrides the range when set."
+      "info": "Optional. Connect a dynamic source that outputs a number. Defaults to 1 when blank."
     },
     {
       "type": "header",
