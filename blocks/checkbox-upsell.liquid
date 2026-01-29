@@ -1,0 +1,516 @@
+{%- liquid
+  assign block_settings = block.settings
+  assign product_form_id = 'BuyButtons-ProductForm-' | append: section.id
+  assign upsell_product = block_settings.upsell_product
+-%}
+
+<checkbox-upsell
+  id="CheckboxUpsell-{{ block.id }}"
+  class="checkbox-upsell spacing-style"
+  style="{% render 'spacing-style', settings: block_settings %}"
+  {{ block.shopify_attributes }}
+>
+  {% if block_settings.heading != blank %}
+    <p class="checkbox-upsell__heading">{{ block_settings.heading | escape }}</p>
+  {% endif %}
+
+  {% if upsell_product == blank %}
+    <p class="checkbox-upsell__empty">Select an upsell product in the block settings.</p>
+  {% else %}
+    <ul class="checkbox-upsell__list" role="list">
+      {%- liquid
+        assign product = upsell_product
+        assign variant = product.selected_or_first_available_variant
+        assign variant_list = product.variants
+
+        if block_settings.upsell_variant_id != blank
+          assign raw_variant_id = block_settings.upsell_variant_id | strip
+          if raw_variant_id contains '/'
+            assign raw_variant_id = raw_variant_id | split: '/' | last
+          endif
+          assign variant_id_number = raw_variant_id | plus: 0
+          assign variant_from_setting = product.variants | where: 'id', variant_id_number | first
+          if variant_from_setting != blank
+            assign variant = variant_from_setting
+          endif
+        endif
+
+        assign default_quantity = block_settings.default_quantity | default: 1
+        if block_settings.default_quantity_dynamic != blank
+          assign default_quantity = block_settings.default_quantity_dynamic | plus: 0
+        endif
+        if default_quantity < 1
+          assign default_quantity = 1
+        endif
+
+        assign is_available = true
+        if variant == blank or variant.available == false
+          assign is_available = false
+        endif
+
+        assign input_id = 'CheckboxUpsell-' | append: block.id | append: '-' | append: product.id
+        assign select_id = input_id | append: '-variant'
+        assign title_id = input_id | append: '-title'
+        assign price_id = input_id | append: '-price'
+
+        assign image = product.featured_media.preview_image | default: product.featured_image
+        assign image_alt = image.alt | default: product.title
+      -%}
+      <li class="checkbox-upsell__item{% unless is_available %} is-unavailable{% endunless %}">
+        <div class="checkbox checkbox-upsell__control">
+          <input
+            type="checkbox"
+            id="{{ input_id }}"
+            class="checkbox__input checkbox-upsell__checkbox"
+            value="{{ variant.id }}"
+            data-upsell-checkbox
+            data-upsell-variant-id="{{ variant.id }}"
+            data-upsell-default-quantity="{{ default_quantity }}"
+            aria-labelledby="{{ title_id }}"
+            aria-describedby="{{ price_id }}"
+            form="{{ product_form_id }}"
+            {% unless is_available %}
+              disabled
+            {% endunless %}
+          >
+          <label class="checkbox__label" for="{{ input_id }}">
+            {{ 'icon-checkmark.svg' | inline_asset_content }}
+            <span class="visually-hidden">Add {{ product.title }}</span>
+          </label>
+        </div>
+
+        <div class="checkbox-upsell__content">
+          <label class="checkbox-upsell__info" for="{{ input_id }}">
+            <span id="{{ title_id }}" class="checkbox-upsell__title">
+              {% if block_settings.title_prefix != blank %}{{ block_settings.title_prefix | escape }} {% endif -%}
+              {{- product.title }}
+            </span>
+            <span id="{{ price_id }}" class="checkbox-upsell__price">
+              {% if block_settings.show_price %}
+                {% render 'price', product_resource: product, show_unit_price: true, show_sale_price_first: true %}
+              {% endif %}
+            </span>
+          </label>
+
+          <div class="checkbox-upsell__controls">
+            {% if block_settings.show_variant_selector and variant_list.size > 1 %}
+              <div class="checkbox-upsell__variant">
+                <label class="checkbox-upsell__variant-label" for="{{ select_id }}">Variant</label>
+                <select
+                  id="{{ select_id }}"
+                  class="checkbox-upsell__variant-select"
+                  data-upsell-variant-select
+                  data-upsell-variant-default="{{ variant.id }}"
+                  {% unless is_available %}
+                    disabled
+                  {% endunless %}
+                >
+                  {% for v in variant_list %}
+                    <option
+                      value="{{ v.id }}"
+                      {% if v.id == variant.id %}selected{% endif %}
+                      {% unless v.available %}disabled{% endunless %}
+                    >
+                      {{ v.title }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            {% endif %}
+
+            {% if block_settings.show_quantity %}
+              <div class="checkbox-upsell__quantity">
+                <input
+                  type="number"
+                  class="checkbox-upsell__quantity-input"
+                  min="1"
+                  step="1"
+                  value="{{ default_quantity }}"
+                  data-upsell-quantity
+                  data-upsell-id="{{ variant.id }}"
+                  form="{{ product_form_id }}"
+                  {% unless is_available %}
+                    disabled
+                  {% endunless %}
+                >
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <input
+          type="hidden"
+          name="items[{{ block.id }}][id]"
+          value="{{ variant.id }}"
+          data-upsell-hidden-id
+          data-upsell-hidden-variant="{{ variant.id }}"
+          form="{{ product_form_id }}"
+          disabled
+        >
+        <input
+          type="hidden"
+          name="items[{{ block.id }}][quantity]"
+          value="{{ default_quantity }}"
+          data-upsell-hidden-quantity
+          data-upsell-hidden-variant="{{ variant.id }}"
+          form="{{ product_form_id }}"
+          disabled
+        >
+
+        {% if block_settings.show_image and image != blank %}
+          <div class="checkbox-upsell__image">
+            {{
+              image
+              | image_url: width: 120
+              | image_tag: loading: 'lazy', widths: '60,120', sizes: '60px', alt: image_alt, class: 'checkbox-upsell__image-img'
+            }}
+          </div>
+        {% endif %}
+      </li>
+    </ul>
+  {% endif %}
+</checkbox-upsell>
+
+<script>
+  if (!customElements.get('checkbox-upsell')) {
+    class CheckboxUpsell extends HTMLElement {
+      connectedCallback() {
+        this.#init();
+      }
+
+      #init() {
+        const checkboxes = this.querySelectorAll('[data-upsell-checkbox]');
+        if (checkboxes.length === 0) return;
+        const variantSelects = this.querySelectorAll('[data-upsell-variant-select]');
+
+        const syncQuantity = (checkbox) => {
+          const variantId = checkbox.dataset.upsellVariantId;
+          const quantityInput = this.querySelector(`[data-upsell-quantity][data-upsell-id="${variantId}"]`);
+          const hiddenId = this.querySelector(`[data-upsell-hidden-id][data-upsell-hidden-variant="${variantId}"]`);
+          const hiddenQuantity = this.querySelector(
+            `[data-upsell-hidden-quantity][data-upsell-hidden-variant="${variantId}"]`
+          );
+
+          if (checkbox.checked) {
+            if (quantityInput) {
+              quantityInput.removeAttribute('disabled');
+              const min = Number(quantityInput.min) || 1;
+              const currentValue = Number(quantityInput.value);
+              if (!currentValue || currentValue < min) quantityInput.value = String(min);
+            }
+            hiddenId?.removeAttribute('disabled');
+            hiddenQuantity?.removeAttribute('disabled');
+            if (hiddenQuantity instanceof HTMLInputElement) {
+              const nextValue = quantityInput instanceof HTMLInputElement ? quantityInput.value : checkbox.dataset.upsellDefaultQuantity;
+              hiddenQuantity.value = nextValue || '1';
+            }
+          } else {
+            quantityInput?.setAttribute('disabled', 'true');
+            hiddenId?.setAttribute('disabled', 'true');
+            hiddenQuantity?.setAttribute('disabled', 'true');
+          }
+        };
+
+        const updateVariant = (checkbox, variantId) => {
+          const quantityInput = this.querySelector('[data-upsell-quantity]');
+          const hiddenId = this.querySelector('[data-upsell-hidden-id]');
+          const hiddenQuantity = this.querySelector('[data-upsell-hidden-quantity]');
+
+          checkbox.dataset.upsellVariantId = variantId;
+          checkbox.value = variantId;
+
+          if (hiddenId instanceof HTMLInputElement) {
+            hiddenId.value = variantId;
+            hiddenId.dataset.upsellHiddenVariant = variantId;
+          }
+
+          if (hiddenQuantity instanceof HTMLInputElement) {
+            hiddenQuantity.dataset.upsellHiddenVariant = variantId;
+          }
+
+          if (quantityInput instanceof HTMLInputElement) {
+            quantityInput.dataset.upsellId = variantId;
+          }
+
+          syncQuantity(checkbox);
+        };
+
+        checkboxes.forEach((checkbox) => {
+          syncQuantity(checkbox);
+          checkbox.addEventListener('change', () => syncQuantity(checkbox));
+        });
+
+        variantSelects.forEach((select) => {
+          if (!(select instanceof HTMLSelectElement)) return;
+          const checkbox = this.querySelector('[data-upsell-checkbox]');
+          if (!(checkbox instanceof HTMLInputElement)) return;
+          const initialVariant = select.dataset.upsellVariantDefault || select.value;
+          if (initialVariant) {
+            updateVariant(checkbox, initialVariant);
+          }
+          select.addEventListener('change', () => {
+            updateVariant(checkbox, select.value);
+          });
+        });
+
+        this.addEventListener('input', (event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLInputElement)) return;
+          if (!target.matches('[data-upsell-quantity]')) return;
+          const variantId = target.dataset.upsellId;
+          const hiddenQuantity = this.querySelector(
+            `[data-upsell-hidden-quantity][data-upsell-hidden-variant="${variantId}"]`
+          );
+          if (hiddenQuantity instanceof HTMLInputElement) {
+            const min = Number(target.min) || 1;
+            const nextValue = Number(target.value) || min;
+            hiddenQuantity.value = String(Math.max(min, nextValue));
+          }
+        });
+      }
+    }
+
+    customElements.define('checkbox-upsell', CheckboxUpsell);
+  }
+</script>
+
+{% stylesheet %}
+  .checkbox-upsell {
+    display: grid;
+    gap: var(--gap-sm);
+  }
+
+  .checkbox-upsell__heading {
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .checkbox-upsell__empty {
+    margin: 0;
+    color: rgb(var(--color-foreground-rgb) / var(--opacity-40-60));
+  }
+
+  .checkbox-upsell__list {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+  }
+
+  .checkbox-upsell__item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(var(--color-foreground-rgb) / 10%);
+    background: rgb(var(--color-background-rgb));
+  }
+
+  .checkbox-upsell__item.is-unavailable {
+    opacity: 0.6;
+  }
+
+  .checkbox-upsell__control {
+    position: relative;
+  }
+
+  .checkbox-upsell__content {
+    display: grid;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .checkbox-upsell__info {
+    display: grid;
+    gap: 0.25rem;
+    cursor: pointer;
+  }
+
+  .checkbox-upsell__title {
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  .checkbox-upsell__price {
+    font-size: 0.95em;
+  }
+
+  .checkbox-upsell__controls {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.6rem;
+    align-items: end;
+  }
+
+  .checkbox-upsell__variant {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .checkbox-upsell__variant-label {
+    font-size: 0.85em;
+    color: rgb(var(--color-foreground-rgb) / var(--opacity-70-90));
+  }
+
+  .checkbox-upsell__variant-select {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border-radius: 0.4rem;
+    border: 1px solid rgb(var(--color-foreground-rgb) / 12%);
+    background: var(--input-background-color, rgb(var(--color-background-rgb)));
+  }
+
+  .checkbox-upsell__quantity {
+    min-width: 3.25rem;
+  }
+
+  .checkbox-upsell__quantity-input {
+    width: 3.25rem;
+    text-align: center;
+    padding: 0.35rem 0.4rem;
+    border-radius: 0.4rem;
+    border: 1px solid rgb(var(--color-foreground-rgb) / 12%);
+    background: var(--input-background-color, rgb(var(--color-background-rgb)));
+  }
+
+  .checkbox-upsell__quantity-input:disabled {
+    background: var(--input-disabled-background-color);
+    color: var(--input-disabled-text-color);
+  }
+
+  .checkbox-upsell__image {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 0.45rem;
+    overflow: hidden;
+    background: rgb(var(--color-foreground-rgb) / 6%);
+    display: grid;
+    place-items: center;
+  }
+
+  .checkbox-upsell__image-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  @media screen and (max-width: 749px) {
+    .checkbox-upsell__item {
+      grid-template-columns: auto 1fr auto;
+      grid-template-rows: auto auto;
+    }
+
+    .checkbox-upsell__image {
+      grid-column: 3;
+      grid-row: 1 / span 2;
+    }
+
+    .checkbox-upsell__controls {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+  }
+{% endstylesheet %}
+
+{% schema %}
+{
+  "name": "Checkbox upsell",
+  "tag": null,
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Add a little extra"
+    },
+    {
+      "type": "text",
+      "id": "title_prefix",
+      "label": "Title prefix",
+      "default": "Add"
+    },
+    {
+      "type": "product",
+      "id": "upsell_product",
+      "label": "Upsell product"
+    },
+    {
+      "type": "text",
+      "id": "upsell_variant_id",
+      "label": "Upsell variant ID (optional)",
+      "info": "Use a variant ID or connect a dynamic source that outputs a variant ID."
+    },
+    {
+      "type": "checkbox",
+      "id": "show_price",
+      "label": "Show price",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_variant_selector",
+      "label": "Show variant selector",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "show_image",
+      "label": "Show image",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_quantity",
+      "label": "Show quantity",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "default_quantity",
+      "label": "Default quantity",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "default": 1
+    },
+    {
+      "type": "text",
+      "id": "default_quantity_dynamic",
+      "label": "Default quantity (dynamic)",
+      "info": "Optional. Connect a dynamic source that outputs a number. Overrides the range when set."
+    },
+    {
+      "type": "header",
+      "content": "Spacing"
+    },
+    {
+      "type": "range",
+      "id": "padding-block-start",
+      "label": "Top padding",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "padding-block-end",
+      "label": "Bottom padding",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "presets": [
+    {
+      "name": "Checkbox upsell"
+    }
+  ]
+}
+{% endschema %}
